@@ -26,6 +26,7 @@ import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Logger;
 
 import org.eclipse.persistence.descriptors.ClassDescriptor;
 import org.eclipse.persistence.descriptors.FetchGroupManager;
@@ -60,6 +61,7 @@ import org.eclipse.persistence.mappings.DatabaseMapping;
  * @since 10.0.3
  */
 public class WriteLockManager {
+    private static Logger logger = Logger.getLogger(WriteLockManager.class.getSimpleName());
 
     // this will allow us to prevent a readlock thread from looping forever.
     public static final int MAXTRIES = 10000;
@@ -72,6 +74,8 @@ public class WriteLockManager {
 
     public WriteLockManager() {
         this.prevailingQueue = new ExposedNodeLinkedList();
+        logger.warning("THIS IS A CUSTOM FORK FOR ECLIPSELINK v2.7.3");
+
     }
 
     /**
@@ -98,7 +102,9 @@ public class WriteLockManager {
                             toWaitOn.wait();// wait for lock on object to be released
                         }
                     } catch (InterruptedException ex) {
-                        // Ignore exception thread should continue.
+                        //https://jira.site1.hyperwallet.local/browse/HW-53073
+                        //Custom change to allow thread interruptions for bad threads stuck in org.eclipse.persistence.internal.helper.WriteLockManager.acquireLocksForClone pattern
+                        throw org.eclipse.persistence.exceptions.ConcurrencyException.waitWasInterrupted(ex.getMessage());
                     }
                 }
                 Object waitObject = toWaitOn.getObject();
