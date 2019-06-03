@@ -22,10 +22,13 @@
 //       - 526957 : Split the logging and trace messages
 package org.eclipse.persistence.internal.helper;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import org.eclipse.persistence.descriptors.ClassDescriptor;
@@ -88,6 +91,7 @@ public class WriteLockManager {
         IdentityHashMap lockedObjects = new IdentityHashMap();
         IdentityHashMap refreshedObjects = new IdentityHashMap();
         try {
+            Instant startTime = Instant.now();
             // if the descriptor has indirection for all mappings then wait as there will be no deadlock risks
             CacheKey toWaitOn = acquireLockAndRelatedLocks(objectForClone, lockedObjects, refreshedObjects, cacheKey, descriptor, cloningSession);
             int tries = 0;
@@ -102,9 +106,12 @@ public class WriteLockManager {
                             toWaitOn.wait();// wait for lock on object to be released
                         }
                     } catch (InterruptedException ex) {
+                        Instant interruptionTime = Instant.now();
+                        logger.log(Level.WARNING, "This is a custom eclipselink change to allow interrupts after tries: {0}, time taken: {1}", new Object[]{tries,
+                                Duration.between(startTime, interruptionTime)});
                         //https://jira.site1.hyperwallet.local/browse/HW-53073
                         //Custom change to allow thread interruptions for bad threads stuck in org.eclipse.persistence.internal.helper.WriteLockManager.acquireLocksForClone pattern
-                        throw org.eclipse.persistence.exceptions.ConcurrencyException.waitWasInterrupted(ex.getMessage());
+                        throw ConcurrencyException.waitWasInterrupted(ex.getMessage());
                     }
                 }
                 Object waitObject = toWaitOn.getObject();
