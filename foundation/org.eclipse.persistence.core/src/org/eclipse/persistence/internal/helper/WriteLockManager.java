@@ -77,7 +77,6 @@ public class WriteLockManager {
 
     public WriteLockManager() {
         this.prevailingQueue = new ExposedNodeLinkedList();
-        logger.warning("THIS IS A CUSTOM FORK FOR ECLIPSELINK v2.7.3");
 
     }
 
