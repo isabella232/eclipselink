@@ -70,6 +70,7 @@ public class WriteLockManager {
     public static final int MAXTRIES = 10000;
 
     public static final int MAX_WAIT = 600000; //10 mins
+    private static final int ONE_MINUTE_WAIT = 60_000; //1 minute
 
     /* This attribute stores the list of threads that have had a problem acquiring locks */
     /*  the first element in this list will be the prevailing thread */
@@ -89,7 +90,7 @@ public class WriteLockManager {
         IdentityHashMap lockedObjects = new IdentityHashMap();
         IdentityHashMap refreshedObjects = new IdentityHashMap();
         try {
-            Instant startTime = Instant.now();
+            long startTimeInMillis = System.currentTimeMillis();
             // if the descriptor has indirection for all mappings then wait as there will be no deadlock risks
             CacheKey toWaitOn = acquireLockAndRelatedLocks(objectForClone, lockedObjects, refreshedObjects, cacheKey, descriptor, cloningSession);
             int tries = 0;
@@ -104,12 +105,18 @@ public class WriteLockManager {
                             toWaitOn.wait();// wait for lock on object to be released
                         }
                     } catch (InterruptedException ex) {
-                        Instant interruptionTime = Instant.now();
-                        logger.log(Level.WARNING, "This is a custom eclipselink change to allow interrupts after tries: {0}, time taken: {1}", new Object[]{tries,
-                                Duration.between(startTime, interruptionTime)});
                         //https://jira.site1.hyperwallet.local/browse/HW-53073
                         //Custom change to allow thread interruptions for bad threads stuck in org.eclipse.persistence.internal.helper.WriteLockManager.acquireLocksForClone pattern
-                        throw ConcurrencyException.waitWasInterrupted(ex.getMessage());
+                        Long secondsElapsed = (System.currentTimeMillis() - startTimeInMillis) / 1000;
+
+                        if (secondsElapsed >= ONE_MINUTE_WAIT) {
+                            logger.log(Level.SEVERE, "Reached threshold to interrupt. Attempts: {0}, Time elapsed in seconds: {1}", new Object[]{tries,
+                                    secondsElapsed});
+                            throw ConcurrencyException.waitWasInterrupted(ex.getMessage());
+                        } else {
+                            logger.log(Level.WARNING, "This is a custom eclipselink change to allow interrupts, it will not interrupt till 1 minute. Attempts: {0}, Time elapsed in seconds: {1}", new Object[]{tries,
+                                    secondsElapsed});
+                        }
                     }
                 }
                 Object waitObject = toWaitOn.getObject();
