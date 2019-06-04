@@ -70,7 +70,7 @@ public class WriteLockManager {
     public static final int MAXTRIES = 10000;
 
     public static final int MAX_WAIT = 600000; //10 mins
-    private static final int ONE_MINUTE_WAIT = 60_000; //1 minute
+    private static final int MAX_SECS_WAIT = 60; //1 minute
 
     /* This attribute stores the list of threads that have had a problem acquiring locks */
     /*  the first element in this list will be the prevailing thread */
@@ -109,7 +109,7 @@ public class WriteLockManager {
                         //Custom change to allow thread interruptions for bad threads stuck in org.eclipse.persistence.internal.helper.WriteLockManager.acquireLocksForClone pattern
                         Long secondsElapsed = (System.currentTimeMillis() - startTimeInMillis) / 1000;
 
-                        if (secondsElapsed >= ONE_MINUTE_WAIT) {
+                        if (secondsElapsed >= MAX_SECS_WAIT) {
                             logger.log(Level.SEVERE, "Reached threshold to interrupt. Attempts: {0}, Time elapsed in seconds: {1}", new Object[]{tries,
                                     secondsElapsed});
                             throw ConcurrencyException.waitWasInterrupted(ex.getMessage());
