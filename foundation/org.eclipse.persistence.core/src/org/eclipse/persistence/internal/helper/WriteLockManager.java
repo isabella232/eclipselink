@@ -22,30 +22,25 @@
 //       - 526957 : Split the logging and trace messages
 package org.eclipse.persistence.internal.helper;
 
-import java.time.Duration;
-import java.time.Instant;
+import org.eclipse.persistence.descriptors.ClassDescriptor;
+import org.eclipse.persistence.descriptors.FetchGroupManager;
+import org.eclipse.persistence.exceptions.ConcurrencyException;
+import org.eclipse.persistence.internal.helper.linkedlist.ExposedNodeLinkedList;
+import org.eclipse.persistence.internal.identitymaps.CacheKey;
+import org.eclipse.persistence.internal.localization.TraceLocalization;
+import org.eclipse.persistence.internal.queries.ContainerPolicy;
+import org.eclipse.persistence.internal.sessions.*;
+import org.eclipse.persistence.logging.SessionLog;
+import org.eclipse.persistence.mappings.DatabaseMapping;
+
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
-import org.eclipse.persistence.descriptors.ClassDescriptor;
-import org.eclipse.persistence.descriptors.FetchGroupManager;
-import org.eclipse.persistence.exceptions.ConcurrencyException;
-import org.eclipse.persistence.internal.helper.linkedlist.ExposedNodeLinkedList;
-import org.eclipse.persistence.internal.identitymaps.CacheKey;
-import org.eclipse.persistence.internal.localization.LoggingLocalization;
-import org.eclipse.persistence.internal.localization.TraceLocalization;
-import org.eclipse.persistence.internal.queries.ContainerPolicy;
-import org.eclipse.persistence.internal.sessions.AbstractSession;
-import org.eclipse.persistence.internal.sessions.MergeManager;
-import org.eclipse.persistence.internal.sessions.ObjectChangeSet;
-import org.eclipse.persistence.internal.sessions.UnitOfWorkChangeSet;
-import org.eclipse.persistence.internal.sessions.UnitOfWorkImpl;
-import org.eclipse.persistence.logging.SessionLog;
-import org.eclipse.persistence.mappings.DatabaseMapping;
 
 /**
  * INTERNAL:
@@ -70,7 +65,11 @@ public class WriteLockManager {
     public static final int MAXTRIES = 10000;
 
     public static final int MAX_WAIT = 600000; //10 mins
-    private static final int MAX_SECS_WAIT = 60; //1 minute
+    private static final int SIXTY_SECONDS = 60; //1 minute
+    private static final int SEVENTY_SECONDS = 70; //Once we reached 70s, we can assume we are in a bad state, so allow interruption for everything.
+    //Initialize with 0 when we first find a lock.
+    //is volatile enough for this case? How do we guarantee Thread-Safe access? Do we want to add more complexity with synchronized
+    private static volatile LocalDateTime honourInterruptsWithin70secondsOfThisTime = LocalDateTime.now().minusYears(1);
 
     /* This attribute stores the list of threads that have had a problem acquiring locks */
     /*  the first element in this list will be the prevailing thread */
@@ -90,7 +89,7 @@ public class WriteLockManager {
         IdentityHashMap lockedObjects = new IdentityHashMap();
         IdentityHashMap refreshedObjects = new IdentityHashMap();
         try {
-            long startTimeInMillis = System.currentTimeMillis();
+            LocalDateTime localTime = null;
             // if the descriptor has indirection for all mappings then wait as there will be no deadlock risks
             CacheKey toWaitOn = acquireLockAndRelatedLocks(objectForClone, lockedObjects, refreshedObjects, cacheKey, descriptor, cloningSession);
             int tries = 0;
@@ -107,15 +106,30 @@ public class WriteLockManager {
                     } catch (InterruptedException ex) {
                         //https://jira.site1.hyperwallet.local/browse/HW-53073
                         //Custom change to allow thread interruptions for bad threads stuck in org.eclipse.persistence.internal.helper.WriteLockManager.acquireLocksForClone pattern
-                        Long secondsElapsed = (System.currentTimeMillis() - startTimeInMillis) / 1000;
-
-                        if (secondsElapsed >= MAX_SECS_WAIT) {
-                            logger.log(Level.SEVERE, "Reached threshold to interrupt. Attempts: {0}, Time elapsed in seconds: {1}", new Object[]{tries,
-                                    secondsElapsed});
+                        long secondsPassed = ChronoUnit.SECONDS.between(honourInterruptsWithin70secondsOfThisTime, LocalDateTime.now());
+                        if (secondsPassed < SEVENTY_SECONDS) {
+                            logger.log(Level.SEVERE, "Reached threshold to interrupt. Attempts: {0}, Time elapsed in seconds: {1}, Timer: {2}",
+                                    new Object[]{tries,
+                                            secondsPassed, honourInterruptsWithin70secondsOfThisTime});
                             throw ConcurrencyException.waitWasInterrupted(ex.getMessage());
                         } else {
-                            logger.log(Level.WARNING, "This is a custom eclipselink change to allow interrupts, it will not interrupt till 1 minute. Attempts: {0}, Time elapsed in seconds: {1}", new Object[]{tries,
-                                    secondsElapsed});
+                            if (localTime == null) {
+                                localTime = LocalDateTime.now();
+                            }
+                            long secondsPassedLocally = ChronoUnit.SECONDS.between(localTime, LocalDateTime.now());
+                            if (secondsPassedLocally < SIXTY_SECONDS) {
+                                logger.log(Level.WARNING,
+                                        "This is a custom eclipselink change to allow interrupts, it will not interrupt till 1 minute. Attempts: "
+                                                + "{0}, Time elapsed in seconds: {1}",
+                                        new Object[]{tries,
+                                                secondsPassedLocally});
+                            } else {
+                                honourInterruptsWithin70secondsOfThisTime = LocalDateTime.now();
+                                logger.log(Level.SEVERE, "Reached threshold to interrupt. Attempts: {0}, Time elapsed in seconds: {1}, Timer: {2}",
+                                        new Object[]{tries,
+                                                secondsPassed, honourInterruptsWithin70secondsOfThisTime});
+                                throw ConcurrencyException.waitWasInterrupted(ex.getMessage());
+                            }
                         }
                     }
                 }
