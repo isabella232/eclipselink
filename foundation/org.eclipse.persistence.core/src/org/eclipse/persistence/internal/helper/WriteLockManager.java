@@ -108,7 +108,8 @@ public class WriteLockManager {
                         //Custom change to allow thread interruptions for bad threads stuck in org.eclipse.persistence.internal.helper.WriteLockManager.acquireLocksForClone pattern
                         long secondsPassed = ChronoUnit.SECONDS.between(honourInterruptsWithin70secondsOfThisTime, LocalDateTime.now());
                         if (secondsPassed < SEVENTY_SECONDS) {
-                            logger.log(Level.SEVERE, "Reached threshold to interrupt. Attempts: {0}, Time elapsed in seconds: {1}, Timer: {2}",
+                            logger.log(Level.SEVERE,
+                                    "Static Timer: Reached threshold to interrupt. Attempts: {0}, Time elapsed in seconds: {1}, Timer: {2}",
                                     new Object[]{tries,
                                             secondsPassed, honourInterruptsWithin70secondsOfThisTime});
                             throw ConcurrencyException.waitWasInterrupted(ex.getMessage());
@@ -125,7 +126,8 @@ public class WriteLockManager {
                                                 secondsPassedLocally});
                             } else {
                                 honourInterruptsWithin70secondsOfThisTime = LocalDateTime.now();
-                                logger.log(Level.SEVERE, "Reached threshold to interrupt. Attempts: {0}, Time elapsed in seconds: {1}, Timer: {2}",
+                                logger.log(Level.SEVERE,
+                                        "Local Timer: Reached threshold to interrupt. Attempts: {0}, Time elapsed in seconds: {1}, Timer: {2}",
                                         new Object[]{tries,
                                                 secondsPassed, honourInterruptsWithin70secondsOfThisTime});
                                 throw ConcurrencyException.waitWasInterrupted(ex.getMessage());
