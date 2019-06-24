@@ -121,15 +121,14 @@ public class WriteLockManager {
                             if (secondsPassedLocally < SIXTY_SECONDS) {
                                 logger.log(Level.WARNING,
                                         "This is a custom eclipselink change to allow interrupts, it will not interrupt till 1 minute. Attempts: "
-                                                + "{0}, Time elapsed in seconds: {1}",
-                                        new Object[]{tries,
-                                                secondsPassedLocally});
+                                                + "{0}, Time elapsed in seconds: {1}, Local Timer: {2}, Static Timer: {3}",
+                                        new Object[]{tries, secondsPassedLocally, localTime, honourInterruptsWithin70secondsOfThisTime});
                             } else {
                                 honourInterruptsWithin70secondsOfThisTime = LocalDateTime.now();
                                 logger.log(Level.SEVERE,
-                                        "Local Timer: Reached threshold to interrupt. Attempts: {0}, Time elapsed in seconds: {1}, Timer: {2}",
-                                        new Object[]{tries,
-                                                secondsPassed, honourInterruptsWithin70secondsOfThisTime});
+                                        "Local Timer: Reached threshold to interrupt. Attempts: {0}, Time elapsed in seconds: {1}, Local Timer: "
+                                                + "{2}, Static Timer: {3}",
+                                        new Object[]{tries, secondsPassed, localTime, honourInterruptsWithin70secondsOfThisTime});
                                 throw ConcurrencyException.waitWasInterrupted(ex.getMessage());
                             }
                         }
