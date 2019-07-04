@@ -66,7 +66,7 @@ public class WriteLockManager {
 
     public static final int MAX_WAIT = 600000; //10 mins
     private static final int SIXTY_SECONDS = 60; //1 minute
-    private static final int SEVENTY_SECONDS = 70; //Once we reached 70s, we can assume we are in a bad state, so allow interruption for everything.
+    private static final int SEVENTY_SECONDS = 130; //Once we reached 130s, we can assume we are in a bad state, so allow interruption for everything.
     //Initialize with 0 when we first find a lock.
     //is volatile enough for this case? How do we guarantee Thread-Safe access? Do we want to add more complexity with synchronized
     private static volatile LocalDateTime honourInterruptsWithin70secondsOfThisTime = LocalDateTime.now().minusYears(1);
@@ -124,11 +124,11 @@ public class WriteLockManager {
                                                 + "{0}, Time elapsed in seconds: {1}, Local Timer: {2}, Static Timer: {3}",
                                         new Object[]{tries, secondsPassedLocally, localTime, honourInterruptsWithin70secondsOfThisTime});
                             } else {
-                                honourInterruptsWithin70secondsOfThisTime = LocalDateTime.now();
                                 logger.log(Level.SEVERE,
                                         "Local Timer: Reached threshold to interrupt. Attempts: {0}, Time elapsed in seconds: {1}, Local Timer: "
                                                 + "{2}, Static Timer: {3}",
                                         new Object[]{tries, secondsPassed, localTime, honourInterruptsWithin70secondsOfThisTime});
+                                honourInterruptsWithin70secondsOfThisTime = LocalDateTime.now();
                                 throw ConcurrencyException.waitWasInterrupted(ex.getMessage());
                             }
                         }
