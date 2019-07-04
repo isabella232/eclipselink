@@ -65,8 +65,11 @@ public class WriteLockManager {
     public static final int MAXTRIES = 10000;
 
     public static final int MAX_WAIT = 600000; //10 mins
-    private static final int SIXTY_SECONDS = 60; //1 minute
-    private static final int SEVENTY_SECONDS = 130; //Once we reached 130s, we can assume we are in a bad state, so allow interruption for everything.
+    private static final int SECONDS_IN_BAD_STATE = 60; //1 minute
+    //Once we reached SECONDS_BEFORE_HONOUR_INTERRUPT, we can assume the node is in a bad state for SECONDS_IN_BAD_STATE. During this time, we will
+    // honour all interrupts.
+    private static final int SECONDS_BEFORE_HONOUR_INTERRUPT = 130;
+
     //Initialize with 0 when we first find a lock.
     //is volatile enough for this case? How do we guarantee Thread-Safe access? Do we want to add more complexity with synchronized
     private static volatile LocalDateTime honourInterruptsWithin70secondsOfThisTime = LocalDateTime.now().minusYears(1);
@@ -107,7 +110,7 @@ public class WriteLockManager {
                         //https://jira.site1.hyperwallet.local/browse/HW-53073
                         //Custom change to allow thread interruptions for bad threads stuck in org.eclipse.persistence.internal.helper.WriteLockManager.acquireLocksForClone pattern
                         long secondsPassed = ChronoUnit.SECONDS.between(honourInterruptsWithin70secondsOfThisTime, LocalDateTime.now());
-                        if (secondsPassed < SEVENTY_SECONDS) {
+                        if (secondsPassed < SECONDS_BEFORE_HONOUR_INTERRUPT) {
                             logger.log(Level.SEVERE,
                                     "Static Timer: Reached threshold to interrupt. Attempts: {0}, Time elapsed in seconds: {1}, Timer: {2}",
                                     new Object[]{tries,
@@ -118,7 +121,7 @@ public class WriteLockManager {
                                 localTime = LocalDateTime.now();
                             }
                             long secondsPassedLocally = ChronoUnit.SECONDS.between(localTime, LocalDateTime.now());
-                            if (secondsPassedLocally < SIXTY_SECONDS) {
+                            if (secondsPassedLocally < SECONDS_IN_BAD_STATE) {
                                 logger.log(Level.WARNING,
                                         "This is a custom eclipselink change to allow interrupts, it will not interrupt till 1 minute. Attempts: "
                                                 + "{0}, Time elapsed in seconds: {1}, Local Timer: {2}, Static Timer: {3}",
