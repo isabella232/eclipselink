@@ -65,7 +65,7 @@ public class WriteLockManager {
     public static final int MAXTRIES = 10000;
 
     public static final int MAX_WAIT = 600000; //10 mins
-    private static final int SECONDS_IN_BAD_STATE = 60; //1 minute
+    private static final int SECONDS_IN_BAD_STATE = 60;
     //Once we reached SECONDS_BEFORE_HONOUR_INTERRUPT, we can assume the node is in a bad state for SECONDS_IN_BAD_STATE. During this time, we will
     // honour all interrupts.
     private static final int SECONDS_BEFORE_HONOUR_INTERRUPT = 130;
