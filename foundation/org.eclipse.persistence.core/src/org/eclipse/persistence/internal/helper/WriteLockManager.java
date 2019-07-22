@@ -33,8 +33,6 @@ import org.eclipse.persistence.internal.sessions.*;
 import org.eclipse.persistence.logging.SessionLog;
 import org.eclipse.persistence.mappings.DatabaseMapping;
 
-import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -65,14 +63,15 @@ public class WriteLockManager {
     public static final int MAXTRIES = 10000;
 
     public static final int MAX_WAIT = 600000; //10 mins
-    private static final int SECONDS_IN_BAD_STATE = 60;
-    //Once we reached SECONDS_BEFORE_HONOUR_INTERRUPT, we can assume the node is in a bad state for SECONDS_IN_BAD_STATE. During this time, we will
-    // honour all interrupts.
-    private static final int SECONDS_BEFORE_HONOUR_INTERRUPT = 130;
+    private static volatile boolean interruptionEnabled;
 
-    //Initialize with 0 when we first find a lock.
-    //is volatile enough for this case? How do we guarantee Thread-Safe access? Do we want to add more complexity with synchronized
-    private static volatile LocalDateTime honourInterruptsWithin70secondsOfThisTime = LocalDateTime.now().minusYears(1);
+    public static boolean isInterruptionEnabled() {
+        return interruptionEnabled;
+    }
+
+    public static void setInterruptionEnabled(boolean interruptionEnabled) {
+        WriteLockManager.interruptionEnabled = interruptionEnabled;
+    }
 
     /* This attribute stores the list of threads that have had a problem acquiring locks */
     /*  the first element in this list will be the prevailing thread */
@@ -92,7 +91,6 @@ public class WriteLockManager {
         IdentityHashMap lockedObjects = new IdentityHashMap();
         IdentityHashMap refreshedObjects = new IdentityHashMap();
         try {
-            LocalDateTime localTime = null;
             // if the descriptor has indirection for all mappings then wait as there will be no deadlock risks
             CacheKey toWaitOn = acquireLockAndRelatedLocks(objectForClone, lockedObjects, refreshedObjects, cacheKey, descriptor, cloningSession);
             int tries = 0;
@@ -109,32 +107,13 @@ public class WriteLockManager {
                     } catch (InterruptedException ex) {
                         //https://jira.site1.hyperwallet.local/browse/HW-53073
                         //Custom change to allow thread interruptions for bad threads stuck in org.eclipse.persistence.internal.helper.WriteLockManager.acquireLocksForClone pattern
-                        long secondsPassed = ChronoUnit.SECONDS.between(honourInterruptsWithin70secondsOfThisTime, LocalDateTime.now());
-                        if (secondsPassed < SECONDS_BEFORE_HONOUR_INTERRUPT) {
+                        if (interruptionEnabled) {
                             logger.log(Level.SEVERE,
-                                    "Static Timer: Reached threshold to interrupt. Attempts: {0}, Time elapsed in seconds: {1}, Timer: {2}",
-                                    new Object[]{tries,
-                                            secondsPassed, honourInterruptsWithin70secondsOfThisTime});
+                                    "EclipseLinkLockHandler has set interruption flag to TRUE. Allowing interrupts");
                             throw ConcurrencyException.waitWasInterrupted(ex.getMessage());
-                        } else {
-                            if (localTime == null) {
-                                localTime = LocalDateTime.now();
-                            }
-                            long secondsPassedLocally = ChronoUnit.SECONDS.between(localTime, LocalDateTime.now());
-                            if (secondsPassedLocally < SECONDS_IN_BAD_STATE) {
-                                logger.log(Level.WARNING,
-                                        "This is a custom eclipselink change to allow interrupts, it will not interrupt till 1 minute. Attempts: "
-                                                + "{0}, Time elapsed in seconds: {1}, Local Timer: {2}, Static Timer: {3}",
-                                        new Object[]{tries, secondsPassedLocally, localTime, honourInterruptsWithin70secondsOfThisTime});
-                            } else {
-                                logger.log(Level.SEVERE,
-                                        "Local Timer: Reached threshold to interrupt. Attempts: {0}, Time elapsed in seconds: {1}, Local Timer: "
-                                                + "{2}, Static Timer: {3}",
-                                        new Object[]{tries, secondsPassed, localTime, honourInterruptsWithin70secondsOfThisTime});
-                                honourInterruptsWithin70secondsOfThisTime = LocalDateTime.now();
-                                throw ConcurrencyException.waitWasInterrupted(ex.getMessage());
-                            }
                         }
+                        logger.log(Level.WARNING,
+                                "EclipseLinkLockHandler has not set the interruption flag to TRUE. Will not interrupt");
                     }
                 }
                 Object waitObject = toWaitOn.getObject();
@@ -146,6 +125,7 @@ public class WriteLockManager {
                 toWaitOn = acquireLockAndRelatedLocks(objectForClone, lockedObjects, refreshedObjects, cacheKey, descriptor, cloningSession);
                 if ((toWaitOn != null) && ((++tries) > MAXTRIES)) {
                     // If we've tried too many times abort.
+                    logger.log(Level.WARNING, "Interruption done by EclipseLink Library.");
                     throw ConcurrencyException.maxTriesLockOnCloneExceded(objectForClone);
                 }
             }
