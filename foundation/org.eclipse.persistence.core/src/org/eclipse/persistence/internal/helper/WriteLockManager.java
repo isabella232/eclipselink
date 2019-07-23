@@ -40,6 +40,8 @@ import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import static java.lang.Boolean.parseBoolean;
+
 /**
  * INTERNAL:
  * <p>
@@ -57,21 +59,19 @@ import java.util.logging.Logger;
  * @since 10.0.3
  */
 public class WriteLockManager {
-    private static Logger logger = Logger.getLogger(WriteLockManager.class.getSimpleName());
+
+    private static final Logger logger = Logger.getLogger(WriteLockManager.class.getSimpleName());
 
     // this will allow us to prevent a readlock thread from looping forever.
     public static final int MAXTRIES = 10000;
 
     public static final int MAX_WAIT = 600000; //10 mins
-    private static volatile boolean interruptionEnabled;
 
-    public static boolean isInterruptionEnabled() {
-        return interruptionEnabled;
+    private static boolean isInterruptionEnabled() {
+        String value = System.getProperty("interruptionEnabled");
+        return parseBoolean(value);
     }
 
-    public static void setInterruptionEnabled(boolean interruptionEnabled) {
-        WriteLockManager.interruptionEnabled = interruptionEnabled;
-    }
 
     /* This attribute stores the list of threads that have had a problem acquiring locks */
     /*  the first element in this list will be the prevailing thread */
@@ -107,7 +107,7 @@ public class WriteLockManager {
                     } catch (InterruptedException ex) {
                         //https://jira.site1.hyperwallet.local/browse/HW-53073
                         //Custom change to allow thread interruptions for bad threads stuck in org.eclipse.persistence.internal.helper.WriteLockManager.acquireLocksForClone pattern
-                        if (interruptionEnabled) {
+                        if (isInterruptionEnabled()) {
                             logger.log(Level.SEVERE,
                                     "EclipseLinkLockHandler has set interruption flag to TRUE. Allowing interrupts");
                             throw ConcurrencyException.waitWasInterrupted(ex.getMessage());
